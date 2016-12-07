@@ -14,4 +14,5 @@ Due to its CEP implementation, the system has been designed to operate in real t
 
 ## Bibliography
 For more information and reference purposes please use the following research paper:
+
 Terroso-Saenz, F., Valdes-Vela, M., & Skarmeta-Gomez, A. F. (2015, September). Tram-Based Mobility Mining with Event Processing of Transit-Card Transactions. In 2015 IEEE 18th International Conference on Intelligent Transportation Systems (pp. 1934-1939). IEEE.
