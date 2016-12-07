@@ -1,4 +1,5 @@
 # tram-CEP
+##Getting Started
 This program is able to detect the itineraries covered by the users of a tram service by using the records of their transit cards. By following the trip-chaining method implemented with Complex Event Processing (CEP) techniques, tram-CEP can make up the origin and destination stations of the users of a tram service. 
 
 Due to its CEP implementation, the system has been designed to operate in real time. However, in its current version only takes the card records from a csv file. Its adaptation for real-time should be quite easy.
