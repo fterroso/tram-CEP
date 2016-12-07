@@ -1,0 +1,166 @@
+/*
+ * Copyright 2015 University of Murcia (Fernando Terroso-Saenz (fterroso@um.es), Mercedes Valdes-Vela, Antonio F. Skarmeta)
+ * 
+ * This file is part of Tram-CEP.
+ * 
+ * Tram-CEP is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * Tram-CEP is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Foobar.  If not, see http://www.gnu.org/licenses/.
+ * 
+ */
+module tranvicep.predict_itineraries;
+
+import tranvicep.config.*;
+import tranvicep.cep.events.*;
+
+//Event types used for the itineraries generation
+create objectarray schema RawValidationEvent as (timestamp long, title String, cardId String, cardSerialNum String, expirityDate long,stopId String, lineId String, trainNumberPlate String);
+create objectarray schema ValidationEvent (stopName String) copyfrom RawValidationEvent;
+create schema PossibleItineraryEvent as PossibleItineraryEventPOJO;
+create schema NoValidationAlarmEvent as NoValidationAlarmEventPOJO;
+
+@PRIORITY(20)
+@NAME('Find possible itinerary query')
+INSERT INTO PossibleItineraryEvent
+SELECT	A.timestamp as startTime,
+            B.timestamp as endTime,
+            A.cardId as cardId,
+            A.cardSerialNum as cardSerialNum,
+            A.stopId as initialStopId,
+            B.stopId as finalStopId,
+            A.lineId as initialLineId,
+            B.lineId as finalLineId,
+            true as valid
+FROM pattern[ every A=ValidationEvent(stopName != 'Los Rect.') ->
+                    (B=ValidationEvent(  cardId = A.cardId, 
+                                        stopId != A.stopId,
+                                        lineId = A.lineId, 
+                                        (getStopNumSeq(A.stopId, A.lineId) < getFinishNumSeqForLine(A.lineId) and
+                                          getStopNumSeq(stopId, lineId) >=  getMiddleNumSeqForLine(A.lineId) and
+                                          getStopNumSeq(stopId, lineId) < getMaxNumSeqForStop(A.stopId, A.lineId)) or
+                                        (getStopNumSeq(A.stopId, A.lineId) > getMiddleNumSeqForLine(A.lineId) and 
+                                          getStopNumSeq(stopId, lineId) >= getStartNumSeqForLine(A.lineId) and 
+                                         getStopNumSeq(stopId, lineId) < getMinNumSeqForStop(A.stopId, A.lineId)),
+                                        (timestamp-A.timestamp) > ConfigProvider.getMinTimeBetweenValidations(), 
+                                        (timestamp-A.timestamp) < ConfigProvider.getMaxTimeBetweenValidations()) and not
+                    ValidationEvent(cardId = A.cardId, lineId != A.lineId))];
+
+@PRIORITY(20)
+@NAME('Find possible itinerary II query')
+INSERT INTO PossibleItineraryEvent
+SELECT	B.timestamp as startTime,
+	C.timestamp as endTime,
+	B.cardId as cardId,
+        A.cardSerialNum as cardSerialNum,
+	B.stopId as initialStopId,
+	C.stopId as finalStopId,
+	B.lineId as initialLineId,
+	C.lineId as finalLineId,
+        true as valid
+FROM pattern[ every  A=ValidationEvent ->
+                     (B=ValidationEvent(cardId = A.cardId, 
+                                        stopName = 'Los Rect.',
+                                        (timestamp-A.timestamp) > ConfigProvider.getMinTimeBetweenValidations()) and not
+                      ValidationEvent(cardId = A.cardId, stopName != 'Lost Rect.')) ->
+                    (C=ValidationEvent(  cardId = A.cardId, 
+                                        stopId != B.stopId,  
+                                        lineId = B.lineId,
+                                    (getStopNumSeq(B.stopId, B.lineId) < getFinishNumSeqForLine(B.lineId) and
+                                        getStopNumSeq(stopId, lineId) >=  getMiddleNumSeqForLine(B.lineId) and
+                                        getStopNumSeq(stopId, lineId) < getMaxNumSeqForStop(B.stopId, B.lineId)) or
+                                    (getStopNumSeq(B.stopId, B.lineId) > getMiddleNumSeqForLine(B.lineId) and 
+                                         getStopNumSeq(stopId, lineId) >= getStartNumSeqForLine(B.lineId) and 
+                                         getStopNumSeq(stopId, lineId) < getMinNumSeqForStop(B.stopId, B.lineId)),
+                                    (timestamp-B.timestamp) > ConfigProvider.getMinTimeBetweenValidations(), 
+                                    (timestamp-B.timestamp) < ConfigProvider.getMaxTimeBetweenValidations()) and not 
+                    ValidationEvent( cardId = A.cardId, lineId != B.lineId))];
+
+
+@PRIORITY(20)
+@NAME('Find possible itinerary III query')
+INSERT INTO PossibleItineraryEvent
+SELECT	A.timestamp as startTime,
+	B.timestamp as endTime,
+	A.cardId as cardId,
+        A.cardSerialNum as cardSerialNum,
+	A.stopId as initialStopId,
+	B.stopId as finalStopId,
+	A.lineId as initialLineId,
+	B.lineId as finalLineId,
+        false as valid
+FROM pattern[ every A=ValidationEvent(stopName != 'Los Rect.') ->
+                    (B=ValidationEvent( stopName != 'Los Rect.',
+                                        cardId = A.cardId, 
+                                        stopId != A.stopId,
+                                        lineId != A.lineId, 
+                                        (timestamp-A.timestamp) > ConfigProvider.getMinTimeBetweenValidations(), 
+                                        (timestamp-A.timestamp) < ConfigProvider.getMaxTimeBetweenValidations()) and not 
+                    ValidationEvent(cardId = A.cardId, stopName = 'Los Rect.' or (timestamp-A.timestamp) > ConfigProvider.getMinTimeBetweenValidations()))];
+
+
+@PRIORITY(20)
+@NAME('Find possible itinerary with transbord query')
+INSERT INTO PossibleItineraryEvent
+SELECT	A.timestamp as startTime,
+	C.timestamp as endTime,
+	A.cardId as cardId,
+        A.cardSerialNum as cardSerialNum,
+	A.stopId as initialStopId,
+	C.stopId as finalStopId,
+	A.lineId as initialLineId,
+	C.lineId as finalLineId,
+        true as valid
+FROM pattern[ every  A=ValidationEvent(stopName != 'Los Rect.') ->
+                     B=ValidationEvent(cardId = A.cardId, 
+                                       stopName = 'Los Rect.',
+                                    (timestamp-A.timestamp) <= ConfigProvider.getMinTimeBetweenValidations()) ->
+                     C=ValidationEvent( cardId = A.cardId, 
+                                        stopName != 'Los Rect.',
+                                        stopName != A.stopName,  
+                                        lineId != A.lineId,
+                                        (timestamp-B.timestamp) > ConfigProvider.getMinTimeBetweenValidations(), 
+                                        (timestamp-B.timestamp) < ConfigProvider.getMaxTimeBetweenValidations())];
+
+@PRIORITY(15)
+@NAME('Complete return trip query')
+SELECT  pie.endTime as startTime,
+        pie.cardId as cardId,
+        pie.finalStopId as initialStopId,
+        pie.initialStopId as finalStopId
+FROM pattern[every pie=PossibleItineraryEvent -> (timer:interval(16 hour) and not 
+                                                    ValidationEvent(
+                                                        cardId=pie.cardId, 
+                                                        (timestamp-pie.endTime) >ConfigProvider.getMinTimeBetweenValidations(), 
+                                                        (timestamp-pie.endTime) < ConfigProvider.getMaxTimeBetweenValidations()))];    
+
+@NAME('No validation alarm query')
+INSERT INTO NoValidationAlarmEvent
+SELECT  current_timestamp as timestamp,
+        pie.cardId as cardId,
+        pie.initialStopId as initStopId,
+        pie.finalStopId as finalStopId,
+        'No validation at Los Rectores' as description
+FROM PossibleItineraryEvent(valid = false) pie;
+
+@NAME("Clean raw validation query")
+INSERT INTO ValidationEvent
+SELECT  rve.timestamp as timestamp,
+        rve.title as title,
+        rve.cardId  as cardId,
+        rve.cardSerialNum as cardSerialNum,
+        rve.expirityDate as expirityDate,
+        rve.stopId as stopId,
+        getStopNameById(rve.stopId) as stopName,
+        rve.trainNumberPlate as trainNumberPlate,
+        case when lineAndStopMatch(rve.lineId,rve.stopId) = true then rve.lineId else getLineFromStopId(rve.stopId) end as lineId
+FROM RawValidationEvent rve
+WHERE rve.stopId not in ('195','205','0','-1','65535');
