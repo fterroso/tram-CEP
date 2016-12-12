@@ -4,7 +4,8 @@ This program is able to detect the itineraries covered by the users of a tram se
 
 Due to its CEP implementation, the system has been designed to operate in real time. However, in its current version only takes the card records from a csv file. Its adaptation for real-time should be quite easy.
 
-##Third-party library dependencies
+## Requirements
+###Library dependencies
 * Esper 4.11
 * Esperio 4.11
 * log4j 1.2.16
