@@ -14,6 +14,9 @@ Due to its CEP implementation, the system has been designed to operate in real t
 * jDOM
 * [METHOD](https://github.com/fterroso/method)
 
+## License
+Tram-CEP is licensed under Lesser General Public License (LGPL) version 3.
+
 ## Bibliography
 For more information and reference purposes please use the following research paper:
 
